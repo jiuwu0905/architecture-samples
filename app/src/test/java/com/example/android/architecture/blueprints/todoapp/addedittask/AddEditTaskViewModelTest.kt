@@ -72,10 +72,18 @@ class AddEditTaskViewModelTest {
             val newTitle = "New Task Title"
             val newDescription = "Some Task Description"
             addEditTaskViewModel.apply {
-                updateTitle(newTitle)
-                updateDescription(newDescription)
+                process(Action.UpdateTitle(newTitle))
+                process(Action.UpdateDescription(newDescription))
             }
-            addEditTaskViewModel.saveTask()
+            val uiState = addEditTaskViewModel.uiState.value
+            addEditTaskViewModel.process(
+                Action.Save(
+                    taskId = uiState.taskId,
+                    title = uiState.title,
+                    description = uiState.description,
+                    taskCompleted = uiState.isTaskCompleted,
+                )
+            )
 
             val newTask = tasksRepository.savedTasks.value.values.first()
 
@@ -187,15 +195,23 @@ class AddEditTaskViewModelTest {
         description: String
     ) {
         addEditTaskViewModel.apply {
-            updateTitle(title)
+            process(Action.UpdateTitle(title))
             assertEquals(title, awaitItem().title)
 
-            updateDescription(description)
+            process(Action.UpdateDescription(description))
             assertEquals(description, awaitItem().description)
         }
 
         // When saving an incomplete task
-        addEditTaskViewModel.saveTask()
+        val uiState = addEditTaskViewModel.uiState.value
+        addEditTaskViewModel.process(
+            Action.Save(
+                taskId = uiState.taskId,
+                title = uiState.title,
+                description = uiState.description,
+                taskCompleted = uiState.isTaskCompleted,
+            )
+        )
 
         assertThat(
             awaitItem().userMessage

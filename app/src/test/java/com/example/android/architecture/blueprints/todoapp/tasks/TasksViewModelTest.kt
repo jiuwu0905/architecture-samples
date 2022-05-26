@@ -29,10 +29,9 @@ import com.example.android.architecture.blueprints.todoapp.data.source.FakeRepos
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.last
-import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -78,10 +77,10 @@ class TasksViewModelTest {
 
         // Given an initialized TasksViewModel with initialized tasks
         // When loading of Tasks is requested
-        tasksViewModel.setFiltering(TasksFilterType.ALL_TASKS)
+        tasksViewModel.process(Action.SetFilter(TasksFilterType.ALL_TASKS))
 
         // Trigger loading of tasks
-        tasksViewModel.refresh()
+        tasksViewModel.process(Action.Refresh)
 
         // Then progress indicator is shown
         assertThat(tasksViewModel.uiState.first().isLoading).isTrue()
@@ -100,10 +99,10 @@ class TasksViewModelTest {
     fun loadActiveTasksFromRepositoryAndLoadIntoView() = runTest {
         // Given an initialized TasksViewModel with initialized tasks
         // When loading of Tasks is requested
-        tasksViewModel.setFiltering(TasksFilterType.ACTIVE_TASKS)
+        tasksViewModel.process(Action.SetFilter(TasksFilterType.ACTIVE_TASKS))
 
         // Load tasks
-        tasksViewModel.refresh()
+        tasksViewModel.process(Action.Refresh)
 
         // Then progress indicator is hidden
         assertThat(tasksViewModel.uiState.first().isLoading).isFalse()
@@ -116,10 +115,10 @@ class TasksViewModelTest {
     fun loadCompletedTasksFromRepositoryAndLoadIntoView() = runTest {
         // Given an initialized TasksViewModel with initialized tasks
         // When loading of Tasks is requested
-        tasksViewModel.setFiltering(TasksFilterType.COMPLETED_TASKS)
+        tasksViewModel.process(Action.SetFilter(TasksFilterType.COMPLETED_TASKS))
 
         // Load tasks
-        tasksViewModel.refresh()
+        tasksViewModel.process(Action.Refresh)
 
         // Then progress indicator is hidden
         assertThat(tasksViewModel.uiState.first().isLoading).isFalse()
@@ -134,7 +133,7 @@ class TasksViewModelTest {
         tasksRepository.setReturnError(true)
 
         // Load tasks
-        tasksViewModel.refresh()
+        tasksViewModel.process(Action.Refresh)
 
         // Then progress indicator is hidden
         assertThat(tasksViewModel.uiState.first().isLoading).isFalse()
@@ -151,14 +150,16 @@ class TasksViewModelTest {
             awaitItem()
 
             // When completed tasks are cleared
-            tasksViewModel.clearCompletedTasks()
-            // Await the 3 state changes
-            states().take(3).last()
+            tasksViewModel.process(Action.ClearCompletedTasks)
 
             // Fetch tasks
-            tasksViewModel.refresh()
-            // Await the 2 state changes
-            val uiState = states().take(2).last()
+            tasksViewModel.process(Action.Refresh)
+            val uiState = states()
+                .filter {
+                    it.userMessage == R.string.completed_tasks_cleared
+                            && it.items.none(Task::isCompleted)
+                }
+                .first()
 
             // Fetch tasks
             val allTasks = uiState.items
@@ -184,7 +185,7 @@ class TasksViewModelTest {
         tasksViewModel.uiState.test {
             assertNull(awaitItem().userMessage)
 
-            tasksViewModel.showEditResultMessage(EDIT_RESULT_OK)
+            tasksViewModel.process(Action.ShowEditResultMessage(EDIT_RESULT_OK))
 
             // The snackbar is updated
             assertThat(awaitItem().userMessage)
@@ -201,7 +202,7 @@ class TasksViewModelTest {
             awaitItem()
 
             // When the viewmodel receives a result from another destination
-            tasksViewModel.showEditResultMessage(ADD_EDIT_RESULT_OK)
+            tasksViewModel.process(Action.ShowEditResultMessage(ADD_EDIT_RESULT_OK))
 
             // The snackbar is updated
             assertThat(awaitItem().userMessage)
@@ -218,7 +219,7 @@ class TasksViewModelTest {
             awaitItem()
 
             // When the viewmodel receives a result from another destination
-            tasksViewModel.showEditResultMessage(DELETE_RESULT_OK)
+            tasksViewModel.process(Action.ShowEditResultMessage(DELETE_RESULT_OK))
 
             // The snackbar is updated
             assertThat(awaitItem().userMessage)
@@ -239,7 +240,7 @@ class TasksViewModelTest {
             awaitItem()
 
             // Complete task
-            tasksViewModel.completeTask(task, true)
+            tasksViewModel.process(Action.SetTaskCompletion(task = task, completed = true))
 
             // Verify the task is completed
             assertThat(tasksRepository.savedTasks.value[task.id]?.isCompleted).isTrue()
@@ -263,7 +264,7 @@ class TasksViewModelTest {
             awaitItem()
 
             // Activate task
-            tasksViewModel.completeTask(task, false)
+            tasksViewModel.process(Action.SetTaskCompletion(task = task, completed = false))
 
             // Verify the task is active
             assertThat(tasksRepository.savedTasks.value[task.id]?.isActive).isTrue()
